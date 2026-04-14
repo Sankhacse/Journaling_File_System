@@ -39,9 +39,11 @@ This guarantees:
 
 The filesystem emulates a **10MB disk (`disk.img`)** divided into **4KB blocks**.
 
-[
-10 \text{ MB} = 10 \times 1024 \times 1024 = 10,485,760 \text{ bytes}
-]
+**Calculation:**
+
+```
+10 MB = 10 × 1024 × 1024 = 10,485,760 bytes
+```
 
 Total blocks = **2560**
 
@@ -66,6 +68,7 @@ Total blocks = **2560**
 | `recovery.c`      | Replays journal after crash                               |
 | `inspect.c`       | Debugging tool to inspect disk                            |
 | `fs_structures.h` | Defines core filesystem structures                        |
+| `plot_perf.py`    | Generates performance graph dynamically                   |
 
 ---
 
@@ -131,6 +134,28 @@ cat mnt/crash_test.txt
 
 ---
 
+## 📊 Performance Graph
+
+Instead of storing static images, the performance graph is generated dynamically.
+
+### ▶️ Run the script
+
+```bash
+python3 plot_perf.py
+```
+
+### 📦 Requirements
+
+```bash
+pip install matplotlib
+```
+
+### 📁 Output
+
+* Generates: `performance_graph.png`
+
+---
+
 ## 🔬 Key Features
 
 * ✔️ Custom Linux filesystem using FUSE
@@ -148,7 +173,7 @@ This project demonstrates:
 * Filesystem internals (Inodes, Bitmaps, Blocks)
 * Journaling techniques used in modern FS (ext4, NTFS)
 * Crash consistency mechanisms
-* Systems-level debugging and design
+* Systems-level design and debugging
 
 ---
 
@@ -170,4 +195,3 @@ This project provides a complete, hands-on demonstration of:
 It bridges theoretical OS concepts with real-world filesystem design using Linux and FUSE.
 
 ---
-
