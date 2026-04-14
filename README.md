@@ -1,136 +1,173 @@
+# 🧾 Journaling File System (FUSE-Based)
 
+A high-level systems engineering project that implements a **Journaling File System** for Linux using the **FUSE (Filesystem in Userspace)** framework.
 
-```markdown
-# 🛡️ J-FS: Crash-Consistent Journaling File System
-
-![C](https://img.shields.io/badge/Language-C-blue.svg)
-![FUSE](https://img.shields.io/badge/Tech-FUSE_3-orange.svg)
-![Platform](https://img.shields.io/badge/Platform-Linux-lightgrey.svg)
-![Status](https://img.shields.io/badge/Status-Stable-brightgreen.svg)
-
-**J-FS** is a custom, user-space virtual file system built using **FUSE (Filesystem in Userspace)**. It tackles one of the most fundamental challenges in Operating Systems: the **"Write Hole" problem**. By implementing a **Write-Ahead Logging (WAL)** protocol via Metadata Journaling, J-FS guarantees structural integrity and data consistency even in the event of an asynchronous power failure or system crash.
-
-This project was developed as a comprehensive systems engineering demonstration, bridging the gap between theoretical OS concepts and practical low-level C programming.
+This project demonstrates how modern file systems ensure **consistency, atomicity, and crash recovery** using **Write-Ahead Logging (WAL)**.
 
 ---
 
-## ✨ Key Features
+## 🚨 Problem Addressed: Write Hole
 
-* **Metadata-Only Journaling:** Achieves a high-performance balance by logging critical structural changes (Inodes, Bitmaps) without the massive I/O overhead of double-writing full data blocks.
-* **FUSE Integration:** Fully POSIX-compliant. Standard Linux commands (`ls`, `cat`, `echo`, `mkdir`) work seamlessly out of the box.
-* **Deterministic Fault Injection:** Built-in crash simulation allows users to trigger a hard system fault mid-transaction to prove the necessity of the journal.
-* **Idempotent Recovery Engine:** An offline recovery tool that detects "hanging" transactions in the journal and safely replays them to restore the disk to a consistent state.
-* **Custom Disk Geometry:** Operates on a virtual 10MB `disk.img` divided into distinct zones (Superblock, Bitmaps, Journal, Inodes, Data Blocks).
+During a system crash or power failure, partial writes can leave the filesystem in an **inconsistent state** — this is known as the **Write Hole problem**.
 
----
+### ✅ Solution Implemented
 
-## 🏗️ Disk Layout Architecture
+This filesystem uses **Metadata Journaling**, ensuring that:
 
-The 10MB virtual disk is partitioned into 4KB blocks:
-1. **Block 0 (Superblock):** Magic number and geometry metadata.
-2. **Blocks 1-2 (Bitmaps):** O(1) allocation tracking for Inodes and Data Blocks.
-3. **Block 3 (The Journal):** The transactional safety zone.
-4. **Blocks 4-19 (Inode Table):** Stores file metadata and pointers.
-5. **Blocks 20+ (Data Blocks):** Actual payload storage.
+* Critical metadata (Inodes, Bitmaps) is always recoverable
+* Incomplete operations are safely replayed
+* Filesystem integrity is preserved after crashes
 
 ---
 
-## ⚙️ Prerequisites
+## ⚙️ Core Concept: Write-Ahead Logging (WAL)
 
-You will need a Linux environment (Native or VM) with the FUSE 3 development headers installed.
+Instead of writing directly to disk:
+
+1. 📝 **Log the intent** in a Journal Block
+2. 💾 Perform actual metadata updates
+3. 🔁 On crash → replay journal
+
+This guarantees:
+
+* **Atomicity** (all or nothing updates)
+* **Durability** (data survives crashes)
+
+---
+
+## 💽 Disk Architecture
+
+The filesystem emulates a **10MB disk (`disk.img`)** divided into **4KB blocks**.
+
+[
+10 \text{ MB} = 10 \times 1024 \times 1024 = 10,485,760 \text{ bytes}
+]
+
+Total blocks = **2560**
+
+### 📊 Layout
+
+| Zone        | Block Range | Description                        |
+| ----------- | ----------- | ---------------------------------- |
+| Superblock  | 0           | Filesystem metadata & magic number |
+| Bitmaps     | 1–2         | Tracks free/used blocks & inodes   |
+| Journal     | 3           | Write-ahead log for atomic updates |
+| Inode Table | 4–19        | File metadata (size, pointers)     |
+| Data Blocks | 20+         | Actual file content                |
+
+---
+
+## 🧩 Project Components
+
+| File              | Description                                               |
+| ----------------- | --------------------------------------------------------- |
+| `mkfs.c`          | Initializes disk image with superblock & empty structures |
+| `simple_fs.c`     | Main FUSE filesystem driver                               |
+| `recovery.c`      | Replays journal after crash                               |
+| `inspect.c`       | Debugging tool to inspect disk                            |
+| `fs_structures.h` | Defines core filesystem structures                        |
+
+---
+
+## 🛠️ Build & Run Instructions
+
+### 🔹 Phase 1: Compilation
 
 ```bash
-# Install FUSE3 and GCC (Ubuntu/Debian)
-sudo apt-get update
-sudo apt-get install gcc make libfuse3-dev pkg-config python3
+gcc mkfs.c -o mkfs
+gcc simple_fs.c -o simple_fs -D_FILE_OFFSET_BITS=64 `pkg-config fuse3 --cflags --libs`
+gcc recovery.c -o recovery
+gcc inspect.c -o inspect
 ```
 
 ---
 
-## 🚀 Installation & Build
-
-1. **Clone the repository:**
-   ```bash
-   git clone [https://github.com/Sankhacse/Journaling_File_System.git](https://github.com/Sankhacse/Journaling_File_System.git)
-   cd Journaling_File_System
-   ```
-
-2. **Compile the suite:**
-   *(Assuming you have the Makefile set up. If not, compile manually below)*
-   ```bash
-   gcc mkfs.c -o mkfs
-   gcc simple_fs.c -o simple_fs -D_FILE_OFFSET_BITS=64 `pkg-config fuse3 --cflags --libs`
-   gcc recovery.c -o recovery
-   ```
-
----
-
-## 💻 Live Demo: The Crash & Recover Workflow
-
-To truly see the journaling in action, you need **two terminal windows**.
-
-### Step 1: Format & Mount (Terminal 1)
-Format the virtual disk and start the FUSE driver in the foreground so you can watch the logs.
+### 🔹 Phase 2: Initialize & Mount
 
 ```bash
-# Create the 10MB disk.img and write the Superblock
 ./mkfs
-
-# Create a mount point
 mkdir -p mnt
-
-# Mount the filesystem (runs in foreground)
 ./simple_fs -f mnt/
 ```
 
-### Step 2: Interact & Simulate Crash (Terminal 2)
-Open a second terminal window, navigate to the project folder, and act as the user.
+---
+
+### 🔹 Phase 3: Test + Crash Simulation
+
+Open another terminal:
 
 ```bash
-# Write a standard file
-echo "Hello World, this is J-FS!" > mnt/hello.txt
+ls -l mnt/
+
+echo "Success test" > mnt/hello.txt
 cat mnt/hello.txt
 
-# TRIGGER THE CRASH (Watch Terminal 1 instantly die)
-echo "CRASH" > mnt/test.txt
+# Trigger crash
+echo "CRASH" > mnt/crash_test.txt
 ```
-*Note: Because of the crash, the journal wrote the intent, but the Inode table was never permanently updated!*
 
-### Step 3: The Recovery (Terminal 1)
-The file system is now technically "corrupted". Let's fix it.
+💥 This simulates a failure **after journaling but before metadata commit**
+
+---
+
+### 🔹 Phase 4: Recovery
 
 ```bash
-# First, force-unmount the broken folder
 fusermount3 -u mnt
-
-# Run the Idempotent Recovery Engine
 ./recovery
-
-# Remount the filesystem to verify
 ./simple_fs -f mnt/
 ```
 
-### Step 4: Verify Success (Terminal 2)
+---
+
+### 🔹 Phase 5: Verification
+
 ```bash
-# The system successfully rebuilt the Inode from the Journal!
-cat mnt/test.txt
+ls -l mnt/
+cat mnt/crash_test.txt
 ```
 
----
-
-## 📊 Performance Evaluation
-
-Journaling introduces a "performance tax" because of the extra I/O write to the journal block. However, by using **Metadata Journaling**, this latency is kept to a statistical minimum while guaranteeing 100% structural integrity.
+✅ If file exists → journaling worked successfully
 
 ---
 
-## 🔮 Future Scope
-* Implementation of **Indirect Pointers** to support file sizes larger than direct block limits.
-* Addition of a **Full Data Journaling** mode toggle for mission-critical payloads.
-* Journal circular buffering for sustained heavy I/O workloads.
+## 🔬 Key Features
+
+* ✔️ Custom Linux filesystem using FUSE
+* ✔️ Metadata Journaling (WAL)
+* ✔️ Crash simulation & recovery
+* ✔️ Block-level disk emulation
+* ✔️ Atomic transaction handling
 
 ---
 
-## 👨‍💻 Author
-**Sankha (Sankhacse)** *Computer Science & Engineering* | *IIT BHU* *Designed for educational purposes and systems programming exploration.*
-```
+## 🧠 Learning Outcomes
+
+This project demonstrates:
+
+* Filesystem internals (Inodes, Bitmaps, Blocks)
+* Journaling techniques used in modern FS (ext4, NTFS)
+* Crash consistency mechanisms
+* Systems-level debugging and design
+
+---
+
+## 🚀 Future Improvements
+
+* Data journaling (not just metadata)
+* Multi-block transactions
+* Performance optimizations
+* GUI-based disk visualizer
+
+---
+
+## 📌 Conclusion
+
+This project provides a complete, hands-on demonstration of:
+
+👉 **Atomicity + Durability in storage systems**
+
+It bridges theoretical OS concepts with real-world filesystem design using Linux and FUSE.
+
+---
+
